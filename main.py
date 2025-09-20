@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 load_dotenv()
 
-openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+openai_model = os.getenv("OPENAI_MODEL")
 model = init_chat_model(openai_model, model_provider="openai")
 messages = [
     SystemMessage(content="入力された日本語を英語に訳してください"),
