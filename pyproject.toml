@@ -10,6 +10,7 @@ dependencies = [
     "langchain-tavily>=0.2.11",
     "langgraph>=0.6.7",
     "openai>=1.107.3",
+    "perplexityai>=0.20.0",
     "pydantic-settings>=2.10.1",
     "python-dotenv>=1.1.1",
 ]
