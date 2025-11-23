@@ -6,9 +6,9 @@ from src.config import Settings
 import logging
 from src.prompts import RecipeReccomendAgentPrompts
 from src.models import (
-    Subtask,
     ReccomendPlan,
-    SearchOutput
+    SearchOutput,
+    ToolResult,
 )
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
@@ -42,7 +42,7 @@ class RecipeReccomendAgent:
         prompts: RecipeReccomendAgentPrompts = RecipeReccomendAgentPrompts(),
     ) -> None:
         self.tools = tools
-        self.tool_maps = {tool.name: tool for tool in tools}
+        self.tool_map = {tool.name: tool for tool in tools}
         self.settings = settings
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.prompts = prompts
@@ -124,3 +124,43 @@ class RecipeReccomendAgent:
         messages.append(ai_message)
 
         return {"messages": messages}
+
+    # ツールの実行
+    def execute_tools(self, state: AgentSubGraphState) -> dict:
+        logger.info("ツールの実行を開始しました1。。。")
+        messages = state["messages"]
+        tool_results = []
+
+        # 最後のメッセージからツール呼び出し情報を取得
+        tool_calls = messages[-1]["tool_calls"]
+
+        if tool_calls is None:
+            logger.info("Error： ツール呼び出し情報(tool_calls)がありません")
+            raise ValueError("ツール呼び出し情報(tool_calls)がありません")
+
+        for tool_call in tool_calls:
+            tool_name = tool_call["function"]["name"]
+            tool_args = tool_call["function"]["arguments"]
+
+            tool = self.tool_map[tool_name]
+            tool_result_str = tool.invoke(tool_args)
+            tool_result = SearchOutput(content=tool_result_str)
+
+            tool_results.append(
+                ToolResult(
+                    tool_name=tool_name,
+                    args=tool_args,
+                    results=[tool_result],
+                )
+            )
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": str(tool_result),
+                    "tool_call_id": tool_call["id"]
+                }
+            )
+
+        logger.info("ツールの実行が完了しました")
+        return {"messages": messages, "tool_results": [tool_results]}

@@ -6,5 +6,10 @@ class ReccomendPlan(BaseModel):
 
 
 class SearchOutput(BaseModel):
-    file_name: str = Field(..., description="ファイル名")
-    content: str = Field(..., description="ファイルの内容")
+    content: str = Field(..., description="検索結果")
+
+
+class ToolResult(BaseModel):
+    tool_name: str = Field(..., description="ツールの名前")
+    args: str = Field(..., description="ツールの引数")
+    results: list[SearchOutput] = Field(..., description="ツールの結果")
