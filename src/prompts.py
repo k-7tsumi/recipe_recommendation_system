@@ -104,7 +104,7 @@ class RecipeReccomendAgentPrompts:
         self.recipe_curator_user_prompt = recipe_curatpr_user_prompt
         self.subtask_system_prompt = subtask_system_prompt
         self.subtask_tool_selection_user_prompt = subtask_tool_selection_user_prompt
-        self.subtask_reflection_user_prompt = subtask_reflection_user_prompt,
+        self.subtask_reflection_user_prompt = subtask_reflection_user_prompt
         self.subtask_retry_answer_user_prompt = subtask_retry_answer_user_prompt
         self.create_last_answer_system_prompt = create_last_answer_system_prompt
         self.create_last_answer_user_prompt = create_last_answer_user_prompt

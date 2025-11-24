@@ -42,6 +42,8 @@ class AgentSubGraphState(TypedDict):
     messages: list[ChatCompletionMessageParam]
     tool_results: Annotated[Sequence[Sequence[SearchOutput]], operator.add]
     challenge_count: int
+    reflection_results: Annotated[Sequence[ReflectionResult], operator.add]
+    subtask_answer: str
 
 
 class RecipeReccomendAgent:
@@ -134,8 +136,43 @@ class RecipeReccomendAgent:
     def _execute_subgraph(self, state: AgentState):
         subgraph = self._create_subgraph()
 
+        result = subgraph.invoke(
+            {
+                "question": state["question"],
+                "plan": state["plan"],
+                "subtask": state["plan"][state["current_step"]],
+                "current_step": state["current_step"],
+                "is_completed": False,
+                "challenge_count": 0,
+            }
+        )
+
+        # デバッグ: resultのキーを確認
+        logger.info(f"サブグラフ実行結果のキー: {list(result.keys())}")
+        for key in result.keys():
+            value = result[key]
+            value_type = type(value).__name__
+            if isinstance(value, list):
+                logger.info(f"  {key}: {value_type}(長さ={len(value)})")
+            elif isinstance(value, str) and len(value) < 100:
+                logger.info(f"  {key}: {value_type} = '{value}'")
+            else:
+                logger.info(f"  {key}: {value_type}")
+
+        subtask_result = Subtask(
+            task_name=result["subtask"],
+            tool_results=result["tool_results"],
+            reflection_results=result["reflection_results"],
+            is_completed=result["is_completed"],
+            subtask_answer=result["subtask_answer"],
+            challenge_count=result["challenge_count"],
+        )
+
+        return {"subtask_results": [subtask_result]}
+
     # 計画の作成(サブタスクの作成)
     def create_plan(self, state: AgentState) -> dict:
+        logger.info("計画の作成処理を開始しました。。。")
         system_prompt = self.prompts.recipe_curator_system_prompt
         user_prompt = self.prompts.recipe_curator_user_prompt.format(
             question=state["question"],
@@ -147,6 +184,7 @@ class RecipeReccomendAgent:
 
         # OpenAIへリクエスト
         try:
+            logger.info("OpenAIへのリクエスト開始。。。")
             response = self.client.beta.chat.completions.parse(
                 model=self.settings.openai_model,
                 messages=messages,
@@ -154,7 +192,9 @@ class RecipeReccomendAgent:
                 temperature=0,
                 seed=0,
             )
+            logger.info("OpenAIからの応答を正常に受信しました。")
         except Exception as e:
+            logger.error(f"OpenAIリクエスト中にエラーが発生しました: {e}")
             raise
 
         reccomend_plan = response.choices[0].message.parsed
@@ -164,6 +204,7 @@ class RecipeReccomendAgent:
 
     # ツール選択
     def select_tools(self, state: AgentSubGraphState) -> dict:
+        logger.info("ツール選択処理を開始しました。。。")
         # OpenAI対応のtool定義に書き換える
         openai_tools = [convert_to_openai_tool(tool) for tool in self.tools]
 
@@ -214,7 +255,7 @@ class RecipeReccomendAgent:
 
     # ツールの実行
     def execute_tools(self, state: AgentSubGraphState) -> dict:
-        logger.info("ツールの実行を開始しました1。。。")
+        logger.info("ツールの実行を開始しました。。。")
         messages = state["messages"]
         tool_results = []
 
@@ -262,7 +303,7 @@ class RecipeReccomendAgent:
             response = self.client.chat.completions.create(
                 model=self.settings.openai_model,
                 messages=messages,
-                temprature=0,
+                temperature=0,
                 seed=0,
             )
             logger.info("OpenAIからのレスポンス受け取り完了")
@@ -287,6 +328,19 @@ class RecipeReccomendAgent:
         messages = state["messages"]
         user_prompt = self.prompts.subtask_reflection_user_prompt
         messages.append({"role": "user", "content": user_prompt})
+
+        # デバッグ: メッセージの詳細をログ出力
+        logger.info(f"メッセージ数: {len(messages)}")
+        for i, msg in enumerate(messages):
+            role = msg.get("role")
+            content = msg.get("content")
+            content_type = type(content).__name__
+            has_tool_calls = "tool_calls" in msg
+            has_tool_call_id = "tool_call_id" in msg
+            logger.info(
+                f"メッセージ[{i}]: role={role}, content_type={content_type}, has_tool_calls={has_tool_calls}, has_tool_call_id={has_tool_call_id}")
+            if content is not None and len(str(content)) < 100:
+                logger.info(f"  content preview: {content}")
 
         try:
             logger.info("OpenAIへのリクエストを開始。。。")
