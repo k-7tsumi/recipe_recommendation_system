@@ -87,9 +87,15 @@ class RecipeReccomendAgent:
         workflow.add_node("select_tools", self.select_tools)
         # ツールの実行ノードを追加
         workflow.add_node("execute_tools", self.execute_tools)
+        # サブタスク回答作成ノードを追加
+        workflow.add_node("create_subtask_answer", self.create_subtask_answer)
+
+        # ツール選択からスタート
+        workflow.add_node(START, "select_tools")
 
         # ノード間のエッジを追加
         workflow.add_edge("select_tools", "execute_tools")
+        workflow.add_edge("execute_tools", "create_subtask_answer")
 
         app = workflow.compile()
         return app
@@ -214,3 +220,32 @@ class RecipeReccomendAgent:
 
         logger.info("ツールの実行が完了しました")
         return {"messages": messages, "tool_results": [tool_results]}
+
+    # サブタスク回答を作成する
+    def create_subtask_answer(self, state: AgentSubGraphState) -> dict:
+        logger.info("サブタスクの回答処理を開始。。。")
+        messages = state["messages"]
+
+        try:
+            logger.info("OpenAIへのリクエスト開始。。。")
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_model,
+                messages=messages,
+                temprature=0,
+                seed=0,
+            )
+            logger.info("OpenAIからのレスポンス受け取り完了")
+        except Exception as e:
+            logger.error(f"OpenAI リクエストエラー： {e}")
+            raise
+
+        subtask_answer = response.choices[0].message.content
+        ai_message = {"role": "assistant", "content": subtask_answer}
+        messages.append(ai_message)
+
+        logger.info("サブタスクの回答の作成完了")
+
+        return {
+            "messages": messages,
+            "subtask_answer": subtask_answer,
+        }
