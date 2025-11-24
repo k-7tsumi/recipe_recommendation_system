@@ -7,7 +7,6 @@ requires-python = ">=3.12.9"
 dependencies = [
     "langchain>=0.3.27",
     "langchain-openai>=0.3.33",
-    "langchain-tavily>=0.2.11",
     "langgraph>=0.6.7",
     "openai>=1.107.3",
     "perplexityai>=0.20.0",
