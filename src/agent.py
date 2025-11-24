@@ -8,9 +8,14 @@ from src.prompts import RecipeReccomendAgentPrompts
 from src.models import (
     ReccomendPlan,
     SearchOutput,
+    Subtask,
     ToolResult,
+    Plan,
+    AgentResult,
 )
 from langchain_core.utils.function_calling import convert_to_openai_tool
+from langgraph.pregel import Pregel
+from langgraph.graph import START, StateGraph
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +51,51 @@ class RecipeReccomendAgent:
         self.settings = settings
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.prompts = prompts
+
+    # 　エージェントの実行
+    def run_agent(self, question: str) -> AgentResult:
+        app = self.create_graph()
+
+        # TODO： 全ての処理追加後正しい値を入れる
+        return AgentResult(
+            question="",
+            plan=Plan(subtasks=[""]),
+            subtasks="",
+            answer="",
+        )
+
+    # エージェントのメイングラフを作成する
+    def create_graph(self) -> Pregel:
+        # Stateを引数としてGraphを初期化
+        workflow = StateGraph(AgentState)
+        # 計画の作成ノードを追加
+        workflow.add_node("create_plan", self.create_plan)
+        # 実行ステップのノードを追加
+        workflow.add_node("execute_subtasks", self._execute_subgraph)
+
+        # エッジを追加
+        workflow.add_edge(START, "create_plan")
+
+        app = workflow.compile()
+        return app
+
+    # サブグラフの作成
+    def _create_subgraph(self) -> Pregel:
+        # Stateを引数としてGraphを初期化
+        workflow = StateGraph(AgentSubGraphState)
+        # 　ツールの選択ノードを追加
+        workflow.add_node("select_tools", self.select_tools)
+        # ツールの実行ノードを追加
+        workflow.add_node("execute_tools", self.execute_tools)
+
+        # ノード間のエッジを追加
+        workflow.add_edge("select_tools", "execute_tools")
+
+        app = workflow.compile()
+        return app
+
+    def _execute_subgraph(self, state: AgentState):
+        subgraph = self._create_subgraph()
 
     # 計画の作成(サブタスクの作成)
     def create_plan(self, state: AgentState) -> dict:
