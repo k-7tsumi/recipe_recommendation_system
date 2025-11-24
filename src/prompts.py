@@ -62,6 +62,10 @@ SUBTASK_RETRY_ANSWER_USER_PROMPT = """
 1.ツール選択・実行をリフレクションの結果に従ってやり直してください
 """
 
+SUBTASK_REFLECTION_USER_PROMPT = """
+3.リフレクションを開始してください
+"""
+
 
 class RecipeReccomendAgentPrompts:
     def __init__(
@@ -70,10 +74,12 @@ class RecipeReccomendAgentPrompts:
         recipe_curatpr_user_prompt: str = RECIPE_CURATOR_USER_PROMPT,
         subtask_system_prompt: str = SUBTASK_SYSTEM_PROMPT,
         subtask_tool_selection_user_prompt: str = SUBTASK_TOOL_EXECUTION_USER_PROMPT,
+        subtask_reflection_user_prompt: str = SUBTASK_REFLECTION_USER_PROMPT,
         subtask_retry_answer_user_prompt: str = SUBTASK_RETRY_ANSWER_USER_PROMPT,
     ) -> None:
         self.recipe_curator_system_prompt = recipe_curator_system_prompt
         self.recipe_curator_user_prompt = recipe_curatpr_user_prompt
         self.subtask_system_prompt = subtask_system_prompt
         self.subtask_tool_selection_user_prompt = subtask_tool_selection_user_prompt
+        self.subtask_reflection_user_prompt = subtask_reflection_user_prompt,
         self.subtask_retry_answer_user_prompt = subtask_retry_answer_user_prompt

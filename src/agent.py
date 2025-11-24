@@ -1,6 +1,6 @@
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
-from typing import TypedDict, Sequence, Annotated
+from typing import TypedDict, Sequence, Annotated, Literal
 import operator
 from src.config import Settings
 import logging
@@ -12,10 +12,13 @@ from src.models import (
     ToolResult,
     Plan,
     AgentResult,
+    ReflectionResult,
 )
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.pregel import Pregel
-from langgraph.graph import START, StateGraph
+from langgraph.graph import END, START, StateGraph
+
+MAX_CHALLENGE_COUNT = 3
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +92,8 @@ class RecipeReccomendAgent:
         workflow.add_node("execute_tools", self.execute_tools)
         # サブタスク回答作成ノードを追加
         workflow.add_node("create_subtask_answer", self.create_subtask_answer)
+        # サブタスク内省の回答ノードを追加
+        workflow.add_node("reflect_subtask", self.reflect_subtask)
 
         # ツール選択からスタート
         workflow.add_node(START, "select_tools")
@@ -96,6 +101,15 @@ class RecipeReccomendAgent:
         # ノード間のエッジを追加
         workflow.add_edge("select_tools", "execute_tools")
         workflow.add_edge("execute_tools", "create_subtask_answer")
+        workflow.add_edge("create_subtask_answer", "reflect_subtask")
+
+        # サブタスク内省の回答ノードの結果から、繰り返し用エッジを追加
+        workflow.add_conditional_edges(
+            "reflect_subtask",
+            self._should_continue_exec_subtask_flow,
+            {"continue": "select_tools", "end": END}
+
+        )
 
         app = workflow.compile()
         return app
@@ -249,3 +263,54 @@ class RecipeReccomendAgent:
             "messages": messages,
             "subtask_answer": subtask_answer,
         }
+
+    # サブタスク回答を内省する
+    def reflect_subtask(self, state: AgentSubGraphState) -> dict:
+        logger.info("サブタスク回答の内省を開始。。。")
+        messages = state["messages"]
+        user_prompt = self.prompts.subtask_reflection_user_prompt
+        messages.append({"role": "user", "content": user_prompt})
+
+        try:
+            logger.info("OpenAIへのリクエストを開始。。。")
+            response = self.client.beta.chat.completions.parse(
+                model=self.settings.openai_model,
+                messages=messages,
+                response_format=ReflectionResult,
+                temperature=0,
+                seed=0,
+            )
+            logger.info("OpenAIからのレスポンス受け取り完了")
+        except Exception as e:
+            logger.error(f"OpenAI リクエストエラー： {e}")
+            raise
+
+        reflection_result = response.choices[0].message.parsed
+        if reflection_result is None:
+            raise ValueError("内省の回答がありません")
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": reflection_result.model_dump_json(),
+            }
+        )
+
+        update_state = {
+            "messages": messages,
+            "reflection_results": [reflection_result],
+            "challenge_count": state["challenge_count"] + 1,
+            "is_completed": reflection_result.is_completed,
+        }
+
+        if update_state["challenge_count"] >= MAX_CHALLENGE_COUNT and not reflection_result.is_completed:
+            update_state["subtask_answer"] = f"{state['subtask']}の回答が見つかりませんでした。"
+
+        logger.info("サブタスク回答の内省処理完了")
+        return update_state
+
+    def _should_continue_exec_subtask_flow(self, state: AgentSubGraphState) -> Literal["end", "continue"]:
+        if state["is_completed"] or state["challenge_count"] >= MAX_CHALLENGE_COUNT:
+            return "end"
+        else:
+            return "continue"
