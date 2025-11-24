@@ -1,6 +1,13 @@
+import logging
 from src.agent import RecipeReccomendAgent
 from src.config import Settings
 from src.tools.search_for_recipe_on_web import search_for_recipe_on_web
+
+# ログ設定
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 if __name__ == "__main__":
     # 設定の読み込み
