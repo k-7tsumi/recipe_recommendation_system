@@ -17,6 +17,7 @@ from src.models import (
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.pregel import Pregel
 from langgraph.graph import END, START, StateGraph
+from langgraph.constants import Send
 
 MAX_CHALLENGE_COUNT = 3
 
@@ -28,6 +29,7 @@ class AgentState(TypedDict):
     question: str
     plan: list[str]
     current_step: int
+    subtask_results: Annotated[Sequence[Subtask], operator.add]
     last_answer: str
 
 
@@ -58,13 +60,18 @@ class RecipeReccomendAgent:
     # 　エージェントの実行
     def run_agent(self, question: str) -> AgentResult:
         app = self.create_graph()
+        result = app.invoke(
+            {
+                "question": question,
+                "current_step": 0,
+            }
+        )
 
-        # TODO： 全ての処理追加後正しい値を入れる
         return AgentResult(
-            question="",
-            plan=Plan(subtasks=[""]),
-            subtasks="",
-            answer="",
+            question=question,
+            plan=Plan(subtasks=result["plan"]),
+            subtasks=result["subtask_results"],
+            answer=result["last_answer"],
         )
 
     # エージェントのメイングラフを作成する
@@ -75,9 +82,19 @@ class RecipeReccomendAgent:
         workflow.add_node("create_plan", self.create_plan)
         # 実行ステップのノードを追加
         workflow.add_node("execute_subtasks", self._execute_subgraph)
+        # 最終回答の作成ノードを追加
+        workflow.add_node("create_last_answer", self.create_last_answer)
 
-        # エッジを追加
+        # 計画の作成からスタート
         workflow.add_edge(START, "create_plan")
+
+        # execute_subtasksサブグラフを並列で実行するよう処理
+        workflow.add_conditional_edges(
+            "create_plan",
+            self._should_continue_exec_subtasks,
+        )
+        workflow.add_edge("execute_subtasks", "create_last_answer")
+        workflow.set_finish_point("create_last_answer")
 
         app = workflow.compile()
         return app
@@ -96,7 +113,7 @@ class RecipeReccomendAgent:
         workflow.add_node("reflect_subtask", self.reflect_subtask)
 
         # ツール選択からスタート
-        workflow.add_node(START, "select_tools")
+        workflow.add_edge(START, "select_tools")
 
         # ノード間のエッジを追加
         workflow.add_edge("select_tools", "execute_tools")
@@ -309,8 +326,55 @@ class RecipeReccomendAgent:
         logger.info("サブタスク回答の内省処理完了")
         return update_state
 
+    # 最終回答の作成
+    def create_last_answer(self, state: AgentState) -> dict:
+        logger.info("最終回答の作成開始。。。")
+        system_prompt = self.prompts.create_last_answer_system_prompt
+
+        subtask_results = [(result.task_name, result.subtask_answer)
+                           for result in state["subtask_results"]]
+        user_prompt = self.prompts.create_last_answer_user_prompt.format(
+            question=state["question"],
+            plan=state["plan"],
+            subtask_results=str(subtask_results)
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            logger.info("OpenAIへのリクエスト開始。。。")
+            response = self.client.chat.completions.create(
+                model=self.settings.openai_model,
+                messages=messages,
+                temperature=0,
+                seed=0,
+            )
+            logger.info("OpenAIからのレスポンス受け取り完了")
+        except Exception as e:
+            logger.info(f"OpenAIのリクエストに失敗しました。エラー：{e}")
+            raise
+
+        logger.info("最終回答の作成処理が完了しました")
+
+        return {"last_answer": response.choices[0].message.content}
+
     def _should_continue_exec_subtask_flow(self, state: AgentSubGraphState) -> Literal["end", "continue"]:
         if state["is_completed"] or state["challenge_count"] >= MAX_CHALLENGE_COUNT:
             return "end"
         else:
             return "continue"
+
+    def _should_continue_exec_subtasks(self, state: AgentState) -> list:
+        return [
+            Send(
+                "execute_subtasks",
+                {
+                    "question": state["question"],
+                    "plan": state["plan"],
+                    "current_step": idx,
+                },
+            )
+            for idx, _ in enumerate(state["plan"])
+        ]

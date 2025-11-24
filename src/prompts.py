@@ -66,6 +66,27 @@ SUBTASK_REFLECTION_USER_PROMPT = """
 3.リフレクションを開始してください
 """
 
+CREATE_LAST_ANSWER_SYSTEM_PROMPT = """
+あなたは料理レコメンドシステムの回答作成担当です。
+回答までの全体の流れは計画立案 → サブタスク実行 [ツール実行 → サブタスク回答 → リフレクション] → 最終回答となります。
+別エージェントが作成したサブタスクの結果をもとに回答を作成してください。
+回答を作成する際は必ず以下の指示に従って回答を作成してください。
+
+- 回答は実際に質問者が読むものです。質問者の意図や理解度を汲み取り、質問に対して丁寧な回答を作成してください
+- 回答は聞かれたことに対して簡潔で明確にすることを心がけてください
+- あなたが知り得た情報から回答し、不確定な情報や推測を含めないでください
+- 調べた結果から回答がわからなかった場合は、その旨を素直に回答に含めた上で引き続き調査することを伝えてください
+- 回答の中で質問者に対して別のチームに問い合わせるように促すことは避けてください
+"""
+
+CREATE_LAST_ANSWER_USER_PROMPT = """
+ユーザーの質問: {question}
+
+回答のための計画と実行結果: {subtask_results}
+
+回答を作成してください
+"""
+
 
 class RecipeReccomendAgentPrompts:
     def __init__(
@@ -76,6 +97,8 @@ class RecipeReccomendAgentPrompts:
         subtask_tool_selection_user_prompt: str = SUBTASK_TOOL_EXECUTION_USER_PROMPT,
         subtask_reflection_user_prompt: str = SUBTASK_REFLECTION_USER_PROMPT,
         subtask_retry_answer_user_prompt: str = SUBTASK_RETRY_ANSWER_USER_PROMPT,
+        create_last_answer_system_prompt: str = CREATE_LAST_ANSWER_SYSTEM_PROMPT,
+        create_last_answer_user_prompt: str = CREATE_LAST_ANSWER_USER_PROMPT,
     ) -> None:
         self.recipe_curator_system_prompt = recipe_curator_system_prompt
         self.recipe_curator_user_prompt = recipe_curatpr_user_prompt
@@ -83,3 +106,5 @@ class RecipeReccomendAgentPrompts:
         self.subtask_tool_selection_user_prompt = subtask_tool_selection_user_prompt
         self.subtask_reflection_user_prompt = subtask_reflection_user_prompt,
         self.subtask_retry_answer_user_prompt = subtask_retry_answer_user_prompt
+        self.create_last_answer_system_prompt = create_last_answer_system_prompt
+        self.create_last_answer_user_prompt = create_last_answer_user_prompt
