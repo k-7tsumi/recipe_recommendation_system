@@ -61,7 +61,7 @@ class RecipeReccomendAgent:
 
     # 　エージェントの実行
     def run_agent(self, question: str) -> AgentResult:
-        app = self.create_graph()
+        app = self._create_graph()
         result = app.invoke(
             {
                 "question": question,
@@ -77,15 +77,15 @@ class RecipeReccomendAgent:
         )
 
     # エージェントのメイングラフを作成する
-    def create_graph(self) -> Pregel:
+    def _create_graph(self) -> Pregel:
         # Stateを引数としてGraphを初期化
         workflow = StateGraph(AgentState)
         # 計画の作成ノードを追加
-        workflow.add_node("create_plan", self.create_plan)
+        workflow.add_node("create_plan", self._create_plan)
         # 実行ステップのノードを追加
         workflow.add_node("execute_subtasks", self._execute_subgraph)
         # 最終回答の作成ノードを追加
-        workflow.add_node("create_last_answer", self.create_last_answer)
+        workflow.add_node("create_last_answer", self._create_last_answer)
 
         # 計画の作成からスタート
         workflow.add_edge(START, "create_plan")
@@ -106,13 +106,13 @@ class RecipeReccomendAgent:
         # Stateを引数としてGraphを初期化
         workflow = StateGraph(AgentSubGraphState)
         # 　ツールの選択ノードを追加
-        workflow.add_node("select_tools", self.select_tools)
+        workflow.add_node("select_tools", self._select_tools)
         # ツールの実行ノードを追加
-        workflow.add_node("execute_tools", self.execute_tools)
+        workflow.add_node("execute_tools", self._execute_tools)
         # サブタスク回答作成ノードを追加
-        workflow.add_node("create_subtask_answer", self.create_subtask_answer)
+        workflow.add_node("create_subtask_answer", self._create_subtask_answer)
         # サブタスク内省の回答ノードを追加
-        workflow.add_node("reflect_subtask", self.reflect_subtask)
+        workflow.add_node("reflect_subtask", self._reflect_subtask)
 
         # ツール選択からスタート
         workflow.add_edge(START, "select_tools")
@@ -171,7 +171,7 @@ class RecipeReccomendAgent:
         return {"subtask_results": [subtask_result]}
 
     # 計画の作成(サブタスクの作成)
-    def create_plan(self, state: AgentState) -> dict:
+    def _create_plan(self, state: AgentState) -> dict:
         logger.info("計画の作成処理を開始しました。。。")
         system_prompt = self.prompts.recipe_curator_system_prompt
         user_prompt = self.prompts.recipe_curator_user_prompt.format(
@@ -203,7 +203,7 @@ class RecipeReccomendAgent:
         return {"plan": reccomend_plan.subtasks}
 
     # ツール選択
-    def select_tools(self, state: AgentSubGraphState) -> dict:
+    def _select_tools(self, state: AgentSubGraphState) -> dict:
         logger.info("ツール選択処理を開始しました。。。")
         # OpenAI対応のtool定義に書き換える
         openai_tools = [convert_to_openai_tool(tool) for tool in self.tools]
@@ -254,7 +254,7 @@ class RecipeReccomendAgent:
         return {"messages": messages}
 
     # ツールの実行
-    def execute_tools(self, state: AgentSubGraphState) -> dict:
+    def _execute_tools(self, state: AgentSubGraphState) -> dict:
         logger.info("ツールの実行を開始しました。。。")
         messages = state["messages"]
         tool_results = []
@@ -294,7 +294,7 @@ class RecipeReccomendAgent:
         return {"messages": messages, "tool_results": [tool_results]}
 
     # サブタスク回答を作成する
-    def create_subtask_answer(self, state: AgentSubGraphState) -> dict:
+    def _create_subtask_answer(self, state: AgentSubGraphState) -> dict:
         logger.info("サブタスクの回答処理を開始。。。")
         messages = state["messages"]
 
@@ -323,7 +323,7 @@ class RecipeReccomendAgent:
         }
 
     # サブタスク回答を内省する
-    def reflect_subtask(self, state: AgentSubGraphState) -> dict:
+    def _reflect_subtask(self, state: AgentSubGraphState) -> dict:
         logger.info("サブタスク回答の内省を開始。。。")
         messages = state["messages"]
         user_prompt = self.prompts.subtask_reflection_user_prompt
@@ -381,7 +381,7 @@ class RecipeReccomendAgent:
         return update_state
 
     # 最終回答の作成
-    def create_last_answer(self, state: AgentState) -> dict:
+    def _create_last_answer(self, state: AgentState) -> dict:
         logger.info("最終回答の作成開始。。。")
         system_prompt = self.prompts.create_last_answer_system_prompt
 
