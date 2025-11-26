@@ -12,6 +12,7 @@ logging.basicConfig(
 if __name__ == "__main__":
     # 設定の読み込み
     settings = Settings()
+
     agent = RecipeReccomendAgent(
         settings=settings,
         tools=[search_for_recipe_on_web],
